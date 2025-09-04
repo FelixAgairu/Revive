@@ -4,17 +4,20 @@ import me.shedaniel.autoconfig.AutoConfig;
 import me.shedaniel.autoconfig.serializer.JanksonConfigSerializer;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
+import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.object.builder.v1.trade.TradeOfferHelper;
 import net.fabricmc.fabric.api.registry.FabricBrewingRecipeRegistryBuilder;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.entity.attribute.EntityAttributeModifier;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectCategory;
 import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemGroups;
 import net.minecraft.item.ItemStack;
@@ -24,19 +27,22 @@ import net.minecraft.potion.Potions;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.screen.SimpleNamedScreenHandlerFactory;
 import net.minecraft.sound.SoundEvent;
+import net.minecraft.text.Text;
+import net.minecraft.util.ActionResult;
 import net.minecraft.util.Identifier;
 import net.minecraft.village.TradeOffer;
 import net.minecraft.village.TradedItem;
 import net.minecraft.village.VillagerProfession;
 import net.revive.accessor.PlayerEntityAccessor;
 import net.revive.config.ReviveConfig;
-import net.revive.effect.*;
+import net.revive.effect.AftermathEffect;
+import net.revive.effect.LivelyAftermathEffect;
 import net.revive.network.ReviveServerPacket;
-import net.revive.network.packet.DeathReasonPacket;
 import net.revive.network.packet.FirstPersonPacket;
 import net.revive.network.packet.RevivablePacket;
+import net.revive.screen.PlayerLootScreenHandler;
 
 public class ReviveMain implements ModInitializer {
 
@@ -45,7 +51,7 @@ public class ReviveMain implements ModInitializer {
     public static ReviveConfig CONFIG = new ReviveConfig();
     public static final Item REVIVE_ITEM = new Item(new Item.Settings());
 
-    public static final Identifier REVIVE_SOUND = Identifier.of("revive:revive");
+    public static final Identifier REVIVE_SOUND = identifierOf("revive");
     public static SoundEvent REVIVE_SOUND_EVENT = SoundEvent.of(REVIVE_SOUND);
 
     public static final RegistryEntry<StatusEffect> AFTERMATH_EFFECT = register("revive:aftermath",
@@ -75,14 +81,43 @@ public class ReviveMain implements ModInitializer {
             builder.registerPotionRecipe(Potions.MUNDANE, Items.GOLDEN_APPLE, ReviveMain.REVIVIFY_POTION);
         });
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            ServerPlayNetworking.send(handler.player, new DeathReasonPacket(((PlayerEntityAccessor) handler.player).getDeathReason()));
-            ServerPlayNetworking.send(handler.player, new RevivablePacket(((PlayerEntityAccessor) handler.player).canRevive(), ((PlayerEntityAccessor) handler.player).isSupportiveRevival()));
+            if (handler.getPlayer() instanceof PlayerEntityAccessor playerEntityAccessor) {
+                ServerPlayNetworking.send(handler.player, new RevivablePacket(playerEntityAccessor.canRevive(), playerEntityAccessor.isOutOfWorld(), playerEntityAccessor.isSupportiveRevival()));
+            }
         });
-        ServerPlayerEvents.AFTER_RESPAWN.register((ServerPlayerEntity oldPlayer, ServerPlayerEntity newPlayer, boolean alive) -> {
+        ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
             if (ReviveMain.CONFIG.thirdPersonOnDeath) {
                 ServerPlayNetworking.send(newPlayer, new FirstPersonPacket());
             }
         });
+        UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            if (entity instanceof PlayerEntity otherPlayerEntity && otherPlayerEntity.deathTime > 20 && (ReviveMain.CONFIG.allowLootablePlayer || ReviveMain.CONFIG.allowReviveWithHand) && player.getMainHandStack().get(DataComponentTypes.POTION_CONTENTS) == null) {
+                if (!world.isClient()) {
+                    if (ReviveMain.CONFIG.allowReviveWithHand) {
+                        if (!player.isSneaking()) {
+                            if (!((PlayerEntityAccessor) otherPlayerEntity).canRevive()) {
+                                player.sendMessage(Text.translatable("text.revive.info"), true);
+                            }
+                            if (ReviveMain.CONFIG.allowLootablePlayer) {
+                                player.openHandledScreen(
+                                        new SimpleNamedScreenHandlerFactory((syncId, inv, p) -> new PlayerLootScreenHandler(syncId, inv, otherPlayerEntity.getInventory()), otherPlayerEntity.getName()));
+                                return ActionResult.SUCCESS;
+                            }
+                            return ActionResult.PASS;
+                        }
+                    } else if (ReviveMain.CONFIG.allowLootablePlayer) {
+                        player.openHandledScreen(
+                                new SimpleNamedScreenHandlerFactory((syncId, inv, p) -> new PlayerLootScreenHandler(syncId, inv, otherPlayerEntity.getInventory()), otherPlayerEntity.getName()));
+                        return ActionResult.SUCCESS;
+                    }
+                }
+            }
+            return ActionResult.PASS;
+        });
+    }
+
+    public static Identifier identifierOf(String name) {
+        return Identifier.of("revive", name);
     }
 
     private static RegistryEntry<StatusEffect> register(String id, StatusEffect statusEffect) {

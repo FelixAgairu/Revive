@@ -1,21 +1,9 @@
 package net.revive.mixin.client;
 
-import java.util.List;
-
 import com.google.common.collect.Lists;
-
-import org.spongepowered.asm.mixin.Final;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Mutable;
-import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.At.Shift;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
+import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.api.EnvType;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.DeathScreen;
 import net.minecraft.client.gui.screen.Screen;
@@ -24,6 +12,13 @@ import net.minecraft.text.Text;
 import net.revive.ReviveMain;
 import net.revive.accessor.PlayerEntityAccessor;
 import net.revive.network.packet.RevivePacket;
+import org.spongepowered.asm.mixin.*;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.At.Shift;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.List;
 
 @Environment(EnvType.CLIENT)
 @Mixin(DeathScreen.class)
@@ -35,6 +30,8 @@ public abstract class DeathScreenMixin extends Screen {
     private List<ButtonWidget> buttons = Lists.newArrayList();
     @Shadow
     private int ticksSinceDeath;
+    @Unique
+    private ButtonWidget reviveButton;
 
     public DeathScreenMixin(Text title) {
         super(title);
@@ -42,36 +39,56 @@ public abstract class DeathScreenMixin extends Screen {
 
     @Inject(method = "init", at = @At(value = "INVOKE", target = "Ljava/util/List;add(Ljava/lang/Object;)Z", shift = Shift.AFTER))
     protected void initMixin(CallbackInfo info) {
-        if (!((PlayerEntityAccessor) this.client.player).getDeathReason())
-            this.buttons.add((ButtonWidget) this.addDrawableChild(ButtonWidget.builder(Text.translatable("text.deathScreen.revive"), (button) -> {
-                if (((PlayerEntityAccessor) this.client.player).canRevive() && (ReviveMain.CONFIG.timer == -1 || (ReviveMain.CONFIG.timer != -1 && ReviveMain.CONFIG.timer > this.ticksSinceDeath)))
-                    ClientPlayNetworking.send(new RevivePacket(((PlayerEntityAccessor) this.client.player).isSupportiveRevival()));
-            }).dimensions(this.width / 2 - 100, this.height / 4 + 120, 200, 20).build()));
+        if (this.client != null && this.client.player != null && this.client.player instanceof PlayerEntityAccessor playerEntityAccessor && !playerEntityAccessor.isOutOfWorld()) {
+            this.reviveButton = this.addDrawableChild(ButtonWidget.builder(Text.translatable("text.deathScreen.revive"), (button) -> {
+                if (this.client != null && button.active) {
+                    if (!playerEntityAccessor.isOutOfWorld() && playerEntityAccessor.canRevive()) {
+                        if (ReviveMain.CONFIG.timer == -1) {
+                            if (ReviveMain.CONFIG.timer > this.client.player.deathTime) {
+                                ClientPlayNetworking.send(new RevivePacket());
+                            }
+                        } else {
+                            ClientPlayNetworking.send(new RevivePacket());
+                        }
+                        button.active = false;
+                    }
+                }
+            }).dimensions(this.width / 2 - 100, this.height / 4 + 120, 200, 20).build());
+            this.buttons.add(this.reviveButton);
+        }
     }
 
     @Inject(method = "tick", at = @At(value = "TAIL"))
     private void tickMixin(CallbackInfo info) {
-        if (this.buttons.get(this.buttons.size() - 1).active && (!((PlayerEntityAccessor) this.client.player).canRevive()
-                || (ReviveMain.CONFIG.timer != -1 && ReviveMain.CONFIG.timer < this.ticksSinceDeath && !((PlayerEntityAccessor) this.client.player).getDeathReason()))) {
-            this.buttons.get(this.buttons.size() - 1).active = false;
-        } else if (((PlayerEntityAccessor) this.client.player).canRevive() && !this.buttons.get(this.buttons.size() - 1).active) {
-            this.buttons.get(this.buttons.size() - 1).active = true;
+        if (this.ticksSinceDeath > 20 && this.client != null && this.client.player != null && this.client.player instanceof PlayerEntityAccessor playerEntityAccessor) {
+            if (playerEntityAccessor.isOutOfWorld()) {
+                this.reviveButton.active = false;
+            } else if (playerEntityAccessor.canRevive()) {
+                if (ReviveMain.CONFIG.timer != -1) {
+                    this.reviveButton.active = ReviveMain.CONFIG.timer >= this.client.player.deathTime;
+                } else {
+                    this.reviveButton.active = true;
+                }
+            } else {
+                this.reviveButton.active = false;
+            }
+        } else {
+            this.reviveButton.active = false;
         }
-
     }
 
     @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/DrawContext;drawCenteredTextWithShadow(Lnet/minecraft/client/font/TextRenderer;Lnet/minecraft/text/Text;III)V", ordinal = 2))
     private void renderMixin(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo info) {
-        if (this.client.player != null) {
-            if (ReviveMain.CONFIG.timer != -1 && ReviveMain.CONFIG.timer >= this.ticksSinceDeath && !((PlayerEntityAccessor) this.client.player).getDeathReason()) {
-                context.drawCenteredTextWithShadow(this.textRenderer, Text.translatable("text.deathScreen.timer", (ReviveMain.CONFIG.timer - this.ticksSinceDeath) / 20), this.width / 2, 115,
+        if (this.client != null && this.client.player != null && this.client.player instanceof PlayerEntityAccessor playerEntityAccessor) {
+            if (ReviveMain.CONFIG.timer != -1 && ReviveMain.CONFIG.timer >= this.client.player.deathTime && !playerEntityAccessor.isOutOfWorld()) {
+                context.drawCenteredTextWithShadow(this.textRenderer, Text.translatable("text.deathScreen.timer", (ReviveMain.CONFIG.timer - this.client.player.deathTime) / 20), this.width / 2, 115,
                         16777215);
             }
             // Coordinates
             if (ReviveMain.CONFIG.showDeathCoordinates) {
                 context.drawCenteredTextWithShadow(this.textRenderer,
                         Text.translatable("text.deathScreen.coordinates", this.client.player.getBlockX(), this.client.player.getBlockY(), this.client.player.getBlockZ()), this.width / 2,
-                        this.height / 4 + 146 + (!((PlayerEntityAccessor) this.client.player).getDeathReason() ? 0 : -24), 16777215);
+                        this.height / 4 + 146 + (!((PlayerEntityAccessor) this.client.player).isOutOfWorld() ? 0 : -24), 16777215);
             }
         }
 

@@ -16,16 +16,19 @@ public class ReviveConfig implements ConfigData {
     public boolean dropRandom = false;
     @Comment("Drops random items when killed by explosion")
     public boolean dropRandomOnExplosion = true;
-    @Comment("Chance for each inventory item to drop")
+    @Comment("Chance for each inventory item to drop if random drops are enabled")
     public float dropChance = 0.3F;
     @Comment("Mainly for compatibility with RpgZ")
     public boolean allowLootablePlayer = true;
     @Comment("Revive without a potion")
     public boolean allowReviveWithHand = false;
+    public int allowReviveWithHandTime = 60;
     public int reviveHealthPoints = 2;
     public int reviveSupportiveHealthPoints = 10;
     public boolean showDeathCoordinates = true;
     public boolean thirdPersonOnDeath = true;
+    @Comment("Automatically revive when getting revived")
+    public boolean automaticRevive = false;
     public float rotationSpeed = 0.4F;
 
     @Comment("Apply effects on revival")

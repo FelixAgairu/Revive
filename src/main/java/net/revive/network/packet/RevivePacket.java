@@ -3,15 +3,14 @@ package net.revive.network.packet;
 import net.minecraft.network.RegistryByteBuf;
 import net.minecraft.network.codec.PacketCodec;
 import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+import net.revive.ReviveMain;
 
-public record RevivePacket(boolean isSupportiveRevival) implements CustomPayload {
+public record RevivePacket() implements CustomPayload {
 
-    public static final CustomPayload.Id<RevivePacket> PACKET_ID = new CustomPayload.Id<>(Identifier.of("revive", "revive_packet"));
+    public static final CustomPayload.Id<RevivePacket> PACKET_ID = new CustomPayload.Id<>(ReviveMain.identifierOf("revive_packet"));
 
     public static final PacketCodec<RegistryByteBuf, RevivePacket> PACKET_CODEC = PacketCodec.of((value, buf) -> {
-        buf.writeBoolean(value.isSupportiveRevival);
-    }, buf -> new RevivePacket(buf.readBoolean()));
+    }, buf -> new RevivePacket());
 
     @Override
     public Id<? extends CustomPayload> getId() {

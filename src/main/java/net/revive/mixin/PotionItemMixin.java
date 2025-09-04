@@ -38,22 +38,22 @@ public abstract class PotionItemMixin extends Item {
             EntityHitResult entityHitResult = ProjectileUtil.raycast(user, user.getEyePos(), user.getEyePos().add(user.getRotationVec(1.0f).multiply(5.0D)), user.getBoundingBox().expand(2.0D),
                     entity -> !entity.isSpectator(), 10.0D);
             if (entityHitResult != null) {
-                if (entityHitResult.getEntity() instanceof PlayerEntity && ((PlayerEntity) entityHitResult.getEntity()).isDead()
-                        && !((PlayerEntityAccessor) (PlayerEntity) entityHitResult.getEntity()).canRevive()) {
+                if (entityHitResult.getEntity() instanceof PlayerEntity playerEntity && playerEntity.isDead()
+                        && !((PlayerEntityAccessor) playerEntity).canRevive()) {
                     if (!world.isClient()) {
-                        ServerPlayNetworking.send((ServerPlayerEntity) entityHitResult.getEntity(), new RevivablePacket(true, potionContentsComponent.matches(ReviveMain.SUPPORTIVE_REVIVIFY_POTION)));
-                        world.playSound(null, user.getBlockPos(), ReviveMain.REVIVE_SOUND_EVENT, SoundCategory.PLAYERS, 1.0F, 0.9F + world.random.nextFloat() * 0.2F);
+                        ServerPlayNetworking.send((ServerPlayerEntity) playerEntity, new RevivablePacket(true, false, potionContentsComponent.matches(ReviveMain.SUPPORTIVE_REVIVIFY_POTION)));
+                        world.playSound(null, playerEntity.getX(), playerEntity.getY(), playerEntity.getZ(), ReviveMain.REVIVE_SOUND_EVENT, SoundCategory.PLAYERS, 1.0F, 0.9F + playerEntity.getWorld().getRandom().nextFloat() * 0.2F, playerEntity.getRandom().nextLong());
                     }
                     if (!user.getAbilities().creativeMode) {
                         user.getStackInHand(hand).decrement(1);
                     }
                     info.setReturnValue(TypedActionResult.consume(user.getStackInHand(hand)));
                 }
-            } else if (world.getClosestPlayer(user, 2.5D) != null && world.getClosestPlayer(user, 2.5D).isDead() && !((PlayerEntityAccessor) world.getClosestPlayer(user, 2.5D)).canRevive()) {
+            } else if (world.getClosestPlayer(user, 2.5D) instanceof PlayerEntity playerEntity && playerEntity.isDead() && !((PlayerEntityAccessor) playerEntity).canRevive()) {
                 if (!world.isClient()) {
-                    ServerPlayNetworking.send((ServerPlayerEntity) world.getClosestPlayer(user, 2.5D),
-                            new RevivablePacket(true, potionContentsComponent.matches(ReviveMain.SUPPORTIVE_REVIVIFY_POTION)));
-                    world.playSound(null, user.getBlockPos(), ReviveMain.REVIVE_SOUND_EVENT, SoundCategory.PLAYERS, 1.0F, 0.9F + world.random.nextFloat() * 0.2F);
+                    ServerPlayNetworking.send((ServerPlayerEntity) playerEntity,
+                            new RevivablePacket(true, false, potionContentsComponent.matches(ReviveMain.SUPPORTIVE_REVIVIFY_POTION)));
+                    world.playSound(null, playerEntity.getX(), playerEntity.getY(), playerEntity.getZ(), ReviveMain.REVIVE_SOUND_EVENT, SoundCategory.PLAYERS, 1.0F, 0.9F + playerEntity.getWorld().getRandom().nextFloat() * 0.2F, playerEntity.getRandom().nextLong());
                 }
                 if (!user.getAbilities().creativeMode) {
                     user.getStackInHand(hand).decrement(1);

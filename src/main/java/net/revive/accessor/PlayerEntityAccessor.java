@@ -2,15 +2,15 @@ package net.revive.accessor;
 
 public interface PlayerEntityAccessor {
 
-    public void setDeathReason(boolean outOfWorld);
-
-    public boolean getDeathReason();
-
-    public void setCanRevive(boolean canRevive);
+    public void setCanRevive(boolean canRevive, boolean outOfWorld, boolean supportiveRevival);
 
     public boolean canRevive();
 
-    public void setSupportiveRevival(boolean supportiveRevival);
+    public boolean isOutOfWorld();
 
     public boolean isSupportiveRevival();
+
+    public void setHandReviveTime(int time);
+
+    public int getHandReviveTime();
 }

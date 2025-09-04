@@ -1,36 +1,36 @@
 package net.revive.mixin;
 
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.component.DataComponentTypes;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.screen.SimpleNamedScreenHandlerFactory;
-import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.sound.SoundEvent;
 import net.minecraft.world.World;
 import net.revive.ReviveMain;
 import net.revive.accessor.PlayerEntityAccessor;
-import net.revive.network.packet.RevivablePacket;
-import net.revive.screen.PlayerLootScreenHandler;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PlayerEntity.class)
 public abstract class PlayerEntityMixin extends LivingEntity implements PlayerEntityAccessor {
 
-    private boolean isOutOfWorld = false;
+    @Shadow
+    public abstract void playSound(SoundEvent sound, float volume, float pitch);
+
+    @Unique
     private boolean canRevive = false;
+    @Unique
+    private boolean outOfWorld = false;
+    @Unique
     private boolean supportiveRevival = false;
+    @Unique
+    private int handReviveTime = 0;
 
     public PlayerEntityMixin(EntityType<? extends LivingEntity> entityType, World world) {
         super(entityType, world);
@@ -38,15 +38,15 @@ public abstract class PlayerEntityMixin extends LivingEntity implements PlayerEn
 
     @Inject(method = "readCustomDataFromNbt", at = @At(value = "TAIL"))
     public void readCustomDataFromNbtMixin(NbtCompound nbt, CallbackInfo info) {
-        this.isOutOfWorld = nbt.getBoolean("IsOutOfWorld");
         this.canRevive = nbt.getBoolean("CanRevive");
+        this.outOfWorld = nbt.getBoolean("OutOfWorld");
         this.supportiveRevival = nbt.getBoolean("SupportiveRevival");
     }
 
     @Inject(method = "writeCustomDataToNbt", at = @At(value = "TAIL"))
     public void writeCustomDataToNbtMixin(NbtCompound nbt, CallbackInfo info) {
-        nbt.putBoolean("IsOutOfWorld", this.isOutOfWorld);
         nbt.putBoolean("CanRevive", this.canRevive);
+        nbt.putBoolean("OutOfWorld", this.outOfWorld);
         nbt.putBoolean("SupportiveRevival", this.supportiveRevival);
     }
 
@@ -58,6 +58,7 @@ public abstract class PlayerEntityMixin extends LivingEntity implements PlayerEn
                 if (!ReviveMain.CONFIG.dropLoot) {
                     this.drop((ServerWorld) this.getWorld(), this.getDamageSources().generic());
                 }
+                setCanRevive(false, false, false);
                 this.getWorld().sendEntityStatus(this, (byte) 60);
                 this.remove(Entity.RemovalReason.KILLED);
             }
@@ -65,37 +66,10 @@ public abstract class PlayerEntityMixin extends LivingEntity implements PlayerEn
     }
 
     @Override
-    public ActionResult interactAt(PlayerEntity player, Vec3d hitPos, Hand hand) {
-        if (this.deathTime > 20 && (ReviveMain.CONFIG.allowLootablePlayer || ReviveMain.CONFIG.allowReviveWithHand) && player.getMainHandStack().get(DataComponentTypes.POTION_CONTENTS) == null) {
-            if (!this.getWorld().isClient()) {
-                PlayerEntity otherPlayerEntity = (PlayerEntity) (Object) this;
-                if (ReviveMain.CONFIG.allowReviveWithHand && player.isSneaking()) {
-                    ServerPlayNetworking.send((ServerPlayerEntity) otherPlayerEntity, new RevivablePacket(true, false));
-                    this.getWorld().playSound(null, otherPlayerEntity.getBlockPos(), ReviveMain.REVIVE_SOUND_EVENT, SoundCategory.PLAYERS, 1.0F,
-                            0.9F + this.getWorld().getRandom().nextFloat() * 0.2F);
-                } else if (ReviveMain.CONFIG.allowLootablePlayer) {
-                    player.openHandledScreen(
-                            new SimpleNamedScreenHandlerFactory((syncId, inv, p) -> new PlayerLootScreenHandler(syncId, inv, otherPlayerEntity.getInventory()), otherPlayerEntity.getName()));
-                }
-            }
-            return ActionResult.SUCCESS;
-        } else
-            return super.interactAt(player, hitPos, hand);
-    }
-
-    @Override
-    public void setDeathReason(boolean outOfWorld) {
-        this.isOutOfWorld = outOfWorld;
-    }
-
-    @Override
-    public boolean getDeathReason() {
-        return this.isOutOfWorld;
-    }
-
-    @Override
-    public void setCanRevive(boolean canRevive) {
+    public void setCanRevive(boolean canRevive, boolean outOfWorld, boolean supportiveRevival) {
         this.canRevive = canRevive;
+        this.outOfWorld = outOfWorld;
+        this.supportiveRevival = supportiveRevival;
     }
 
     @Override
@@ -104,13 +78,23 @@ public abstract class PlayerEntityMixin extends LivingEntity implements PlayerEn
     }
 
     @Override
-    public void setSupportiveRevival(boolean supportiveRevival) {
-        this.supportiveRevival = supportiveRevival;
+    public boolean isOutOfWorld() {
+        return this.outOfWorld;
     }
 
     @Override
     public boolean isSupportiveRevival() {
         return this.supportiveRevival;
+    }
+
+    @Override
+    public void setHandReviveTime(int handReviveTime) {
+        this.handReviveTime = handReviveTime;
+    }
+
+    @Override
+    public int getHandReviveTime() {
+        return this.handReviveTime;
     }
 
 }
