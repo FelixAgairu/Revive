@@ -1,6 +1,8 @@
 ### Added:
-- 
+- Added automatic revive option
+- Added revive with hand timer
 ### Fixed:
-- 
+- Fixed timer resetting
+- Fixed other bugs
 ### Changed:
-- Updated to mc 1.21.1
+- Tweaked backend mechanic
